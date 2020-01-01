@@ -1,5 +1,12 @@
+
 https://microcontrollerslab.com/usb-interfacing-pic-microcontroller-code/
 http://openprog.altervista.org/OP_ita.html
+
+Getting Started with USB for PIC184f
+https://www.microchip.com/forums/m1089341.aspx
+
+Usb Code Example for PIC184f
+https://microchipdeveloper.com/faq:2719
 
 https://www.waitingforfriday.com/?p=451 ( Building PIC18F USB device )
 https://www.waitingforfriday.com/?p=520 ( PIC USB Development Board )
@@ -21,3 +28,4 @@ https://electronics.stackexchange.com/questions/436889/why-are-oscilloscope-inpu
 
 Rating of an Oscilloscope
 https://electronics.stackexchange.com/questions/77635/what-does-it-mean-when-they-say-50mhz-oscilloscope-with-250ms-s-sample-rate?rq=1
+
