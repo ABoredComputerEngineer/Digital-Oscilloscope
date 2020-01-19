@@ -15,10 +15,12 @@
 DEVICE     = atmega32
 CLOCK      = 1000000
 PROGRAMMER = -c arduino -P COM7 -b 19200 
-OBJECTS    = main.o
 FUSES      = -U lfuse:w:0xE1:m 	-U hfuse:w:0x99:m 	-U lock:w:0xFF:m
-SRC = .
-
+SRC = ./src
+BIN = ./bin
+OUTELF = $(BIN)/main.elf
+OUTHEX = $(BIN)/main.hex
+OBJECTS    = $(BIN)/main.o
 ######################################################################
 ######################################################################
 
@@ -28,9 +30,9 @@ AVRDUDE = avrdude $(PROGRAMMER) -p $(DEVICE)
 COMPILE = avr-gcc -Wall -Os -DF_CPU=$(CLOCK) -mmcu=$(DEVICE)
 
 # symbolic targets:
-all:	main.hex
+all:	$(OUTHEX)
 
-.c.o:
+$(BIN)/main.o: $(SRC)/main.c
 	$(COMPILE) -c $< -o $@
 
 .S.o:
@@ -44,7 +46,7 @@ all:	main.hex
 	$(COMPILE) -S $< -o $@
 
 flash:	all
-	$(AVRDUDE) -U flash:w:main.hex:i
+	$(AVRDUDE) -U flash:w:$(OUTHEX):i
 
 fuse:
 	$(AVRDUDE) $(FUSES)
@@ -53,24 +55,24 @@ install: flash fuse
 
 # if you use a bootloader, change the command below appropriately:
 load: all
-	bootloadHID main.hex
+	bootloadHID $(OUTELF)
 
 clean:
-	rm -f main.hex main.elf $(OBJECTS)
+	rm -f $(OUTHEX) $(OUTELF) $(OBJECTS)
 
 # file targets:
-main.elf: $(OBJECTS)
-	$(COMPILE) -o main.elf $(OBJECTS)
+$(OUTELF): $(OBJECTS)
+	$(COMPILE) -o $(OUTELF) $(OBJECTS) 
 
-main.hex: main.elf
+$(OUTHEX): $(OUTELF)
 #	rm -f main.hex
-	avr-objcopy -j .text -j .data -O ihex main.elf main.hex
+	avr-objcopy -j .text -j .data -O ihex $(OUTELF) $(OUTHEX)
 # If you have an EEPROM section, you must also create a hex file for the
 # EEPROM and add it to the "flash" target.
 
 # Targets for code debugging and analysis:
-disasm:	main.elf
-	avr-objdump -d main.elf
+disasm:	$(OUTELF)
+	avr-objdump -d $(OUTELF)
 
 cpp:
 	$(COMPILE) -E $(SRC)/main.c
