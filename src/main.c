@@ -8,17 +8,17 @@
 #include <avr/io.h>
 #include <util/delay.h>
 #include "setbaud.h"
+#include <avr/interrupt.h>
+#include <stdbool.h>
 
 typedef unsigned int uint;
 typedef uint16_t u16;
 typedef uint8_t u8;
 typedef uint32_t u32;
 
-static char Message[] = "Hello World!";
-
-static u8 data_to_send[4];
-#define MESSAGE_LEN 12
-#define BAUD_RATE_9600 0x6
+static u8 data_to_send[4 * 25]; // Send data in bursts of 100 bytes
+static u8 data_len = 100;
+#define BAUD_RATE 9600
 
 #define WRITE_UBBRH( x ) ( UBBRH = ( x ) )
 #define WRITE_USCRC( x ) ( USCRC = ( 1<<URSEL ) | ( x ) )
@@ -48,6 +48,31 @@ enum ADC_Prescaler {
   ADC_PS_32 = 0x5,
   ADC_PS_64 = 0x6,
   ADC_PS_128 = 0x7
+};
+
+enum Timer_Prescaler {
+  TIMER_PS_NONE = 0x0,
+  TIMER_PS_1 = 0x1,
+  TIMER_PS_8 = 0x2,
+  TIMER_PS_64 = 0x3,
+  TIMER_PS_256= 0x4,
+  TIMER_PS_1024 = 0x5,
+  TIMER_PS_EXTERNAL_FALL = 0x6,
+  TIMER_PS_EXTERNAL_RISE = 0x7,
+};
+
+typedef enum Program_State{
+  STATE_INACTIVE,
+  STATE_ADC_CONVERSION,
+  STATE_TRANSMISSION
+} Program_State;
+
+volatile Program_State Global_State;
+volatile u8 End_Of_Conversion;
+
+static u8 Timer_Duration[] = {
+  0x4c, 0x4a, // 5sec with 1MHz, PS =256 
+  0x98, 0x95, // 10sec with 1MHz, PS =256 
 };
 
 void USART_init( u16 baud ){
@@ -103,8 +128,6 @@ void ADC_disable( ){
 }
 
 
-// eg. ADC_INPUT_1
-//
 u16 ADC_GetData( u8 input_pin ){
 #if SANITY_CHECK
   ADMUX |= ( input_pin & 0x1f );
@@ -129,52 +152,105 @@ u16 ADC_GetData( u8 input_pin ){
 #endif
 }
 
+void Timer1_Init( u8 ps, u8 high, u8 low ){
+  // toggle OCA1 on compare match
+  // CTC Mode, Sets WGM 11 and WGM 10
+  TCCR1A = ( 0x1 << COM1A0 );
+  TCCR1B |= ( 0x1 << WGM12 ); // Sets  WGM13 and WGM12
+  TCCR1B |= ps; 
+  TIMSK |= ( 0x1 << OCIE1A );
+  // The order is important!!
+  OCR1AH = high;
+  OCR1AL = low;
+}
+
+void Timer2_Init( u8 ps ){
+  // Normal Mode
+  TCCR2 |= ( ps & 0x7 );
+}
+
+
+ISR(TIMER1_COMPA_vect){
+  PORTD |= (1<<PD6);
+  Global_State = STATE_INACTIVE;
+  End_Of_Conversion = true;
+}
+
+
+static inline void Timer1_Reset( void ){
+  SFIOR &= ~(1<<PSR10); // Reset the timer
+}
+
+static inline void Timer2_Reset( void ){
+  SFIOR &= ~(1<<PSR2);
+}
+
 int main(void){
-  DDRD |= ( 1 << PD6 )|(1<<PD4);
+  //cli();
+  DDRD |= (1<<PD7)|(1<<PD6)|(1<<PD5)|(1<<PD4) ;
   USART_init( 6 );  
   ADC_init( ADC_PS_8 ); 
+  Global_State = STATE_INACTIVE;
   // Wait for the host to send something first
-  USART_Receive();
+  u8 user_input;
+  sei();
   for ( ; ; ){
-    PORTD ^= ( 1 << PD4 );
-    // Receive data from analog pins ( ADC Conversion )
-    // This is not inside a function because it
-    // and prevents using unecessary 16-bit ( or even 32-bit )
-    // arithmetic
-    // ( TODO ): Try to use 24-bit ( 3 bytes ) for sending
-    // Currently uses 32-bits ( 4bytes, 16-bit for each
-    // channel )
+    switch ( Global_State ) {
+      case STATE_ADC_CONVERSION:
+//        PORTD ^= ( 1 << PD4 );
+        ADMUX |= ( ADC_INPUT_0  );
+        SET_BIT( ADCSRA, ADSC );
+        u8 time = TCNT2;
+        while ( !ADC_CONVERSION_COMPLETE );
+        data_to_send[0] = time;
+        data_to_send[1] = ADCL;
+        data_to_send[2] = ADCH & 0x3;
+        ADMUX &= ~(ADC_INPUT_0 );
 
-    // Select pin 0 for input 
-      ADMUX |= ( ADC_INPUT_0  );
-      // Start conversion 
-      SET_BIT( ADCSRA, ADSC );
+        ADMUX |= ( ADC_INPUT_1  );
+        SET_BIT( ADCSRA, ADSC );
+        time = TCNT2;
+        Timer2_Reset();
+        while ( !ADC_CONVERSION_COMPLETE );
+        data_to_send[3] = time;
+        data_to_send[4] = ADCL;
+        data_to_send[5] = ADCH & 0x3;
 
-      // TODO: *Maybe* not block and use interrupts ?
-      // block until the conversion completes
-      while ( !ADC_CONVERSION_COMPLETE );
-      // This step is mandatory
-      data_to_send[0] = ADCL;
-      data_to_send[1] = ADCH & 0x3;
-      // Deselect pin 0
-      ADMUX &= ~(ADC_INPUT_0 );
+        USART_Transmit_Buffer( data_to_send, 6 );
+        ADMUX &= ~( ADC_INPUT_1 );
+        break;
+      case STATE_INACTIVE:
+        if ( End_Of_Conversion ){
+          for ( int i = 0; i < 6 ; i++ ){
+            USART_Transmit( 1 << 0x7 );
+          }
+        }
 
-//      _delay_ms( 1 );
-      ADMUX |= ( ADC_INPUT_1  );
-      // Start conversion 
-      SET_BIT( ADCSRA, ADSC );
+        cli();
+        SET_BIT( PORTD, PD6 ); 
+        RESET_BIT( PORTD, PD4 );
+        user_input = USART_Receive();
+        sei();
 
-      // TODO: *Maybe* not block and use interrupts ?
-      // block until the conversion completes
-      while ( !ADC_CONVERSION_COMPLETE );
-      // This step is mandatory
-      data_to_send[2] = ADCL;
-      data_to_send[3] = ADCH & 0x3;
-      USART_Transmit_Buffer( data_to_send, sizeof( data_to_send ) );
-      ADMUX &= ~( ADC_INPUT_1 );
-    // Acknowledgement sent from the host
-//    USART_Receive();
-//    _delay_ms( 500 );
+        Timer2_Init( TIMER_PS_1024 );
+        if ( user_input == 0x0 ) {
+          Timer1_Init( TIMER_PS_256,
+              Timer_Duration[0],
+              Timer_Duration[1] );
+        } else {
+          Timer1_Init( TIMER_PS_256,
+              Timer_Duration[2],
+              Timer_Duration[3] );
+        }
+
+        Global_State = STATE_ADC_CONVERSION;
+        RESET_BIT( PORTD, PD6 );
+        Timer1_Reset();
+        Timer2_Reset();
+        break;
+      default:
+        break;
+    }
   }
   return 0;
 }
