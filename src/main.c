@@ -61,6 +61,17 @@ enum Timer_Prescaler {
   TIMER_PS_EXTERNAL_RISE = 0x7,
 };
 
+enum Timer2_Prescaler {
+  TIMER2_PS_NONE = 0x0,
+  TIMER2_PS_1 = 0x1,
+  TIMER2_PS_8 = 0x2,
+  TIMER2_PS_32 = 0x3,
+  TIMER2_PS_64 = 0x4,
+  TIMER2_PS_128 = 0x5,
+  TIMER2_PS_256 = 0x6,
+  TIMER2_PS_1024 = 0x7,
+};
+
 typedef enum Program_State{
   STATE_INACTIVE,
   STATE_ADC_CONVERSION,
@@ -79,7 +90,7 @@ void USART_init( u16 baud ){
  // Set the baud rate
   //UBRRH = ( u8 )( baud >> 8 );
   //UBRRL = baud & 0xff;
-  setBaud( 9600, 1.0e6 );
+  setBaud( 9600*2, 1.0e6 );
   // Enable reciever and transmitter
   UCSRB = ( 1 << RXEN ) | ( 1 << TXEN );
 
@@ -164,10 +175,12 @@ void Timer1_Init( u8 ps, u8 high, u8 low ){
   OCR1AL = low;
 }
 
+#if 0
 void Timer2_Init( u8 ps ){
   // Normal Mode
   TCCR2 |= ( ps & 0x7 );
 }
+#endif
 
 
 ISR(TIMER1_COMPA_vect){
@@ -178,7 +191,8 @@ ISR(TIMER1_COMPA_vect){
 
 
 static inline void Timer1_Reset( void ){
-  SFIOR &= ~(1<<PSR10); // Reset the timer
+//  SFIOR &= ~(1<<PSR10); // Reset the timer
+  TCNT1 ^= TCNT1;
 }
 
 static inline void Timer2_Reset( void ){
@@ -189,10 +203,10 @@ int main(void){
   //cli();
   DDRD |= (1<<PD7)|(1<<PD6)|(1<<PD5)|(1<<PD4) ;
   USART_init( 6 );  
-  ADC_init( ADC_PS_8 ); 
+  ADC_init( ADC_PS_4 ); 
   Global_State = STATE_INACTIVE;
   // Wait for the host to send something first
-  u8 user_input;
+  u8 user_input, time;
   sei();
   for ( ; ; ){
     switch ( Global_State ) {
@@ -200,21 +214,21 @@ int main(void){
 //        PORTD ^= ( 1 << PD4 );
         ADMUX |= ( ADC_INPUT_0  );
         SET_BIT( ADCSRA, ADSC );
-        u8 time = TCNT2;
+        time = TCNT2;
         while ( !ADC_CONVERSION_COMPLETE );
         data_to_send[0] = time;
         data_to_send[1] = ADCL;
-        data_to_send[2] = ADCH & 0x3;
+        data_to_send[2] = ADCH  & 0x3;
         ADMUX &= ~(ADC_INPUT_0 );
 
         ADMUX |= ( ADC_INPUT_1  );
         SET_BIT( ADCSRA, ADSC );
         time = TCNT2;
-        Timer2_Reset();
+        TCNT2 ^= TCNT2;
         while ( !ADC_CONVERSION_COMPLETE );
         data_to_send[3] = time;
         data_to_send[4] = ADCL;
-        data_to_send[5] = ADCH & 0x3;
+        data_to_send[5] = ADCH  & 0x3;
 
         USART_Transmit_Buffer( data_to_send, 6 );
         ADMUX &= ~( ADC_INPUT_1 );
@@ -232,7 +246,7 @@ int main(void){
         user_input = USART_Receive();
         sei();
 
-        Timer2_Init( TIMER_PS_1024 );
+        TCCR2 =  TIMER2_PS_8 & 0x7;
         if ( user_input == 0x0 ) {
           Timer1_Init( TIMER_PS_256,
               Timer_Duration[0],

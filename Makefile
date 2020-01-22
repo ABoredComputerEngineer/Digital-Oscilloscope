@@ -25,7 +25,7 @@ OBJECTS    = $(BIN)/main.o
 ######################################################################
 
 # Tune the lines below only if you know what you are doing:
-
+# Optimized for speed, not for size
 AVRDUDE = avrdude $(PROGRAMMER) -p $(DEVICE)
 COMPILE = avr-gcc -Wall -Os -DF_CPU=$(CLOCK) -mmcu=$(DEVICE)
 
