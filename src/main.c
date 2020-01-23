@@ -90,7 +90,7 @@ void USART_init( u16 baud ){
  // Set the baud rate
   //UBRRH = ( u8 )( baud >> 8 );
   //UBRRL = baud & 0xff;
-  setBaud( 9600*2, 1.0e6 );
+  setBaud( 9600, 1.0e6 );
   // Enable reciever and transmitter
   UCSRB = ( 1 << RXEN ) | ( 1 << TXEN );
 

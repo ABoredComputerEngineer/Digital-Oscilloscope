@@ -14,7 +14,7 @@
 
 DEVICE     = atmega32
 CLOCK      = 1000000
-PROGRAMMER = -c arduino -P COM7 -b 19200 
+PROGRAMMER = -c arduino -P COM9 -b 19200 
 FUSES      = -U lfuse:w:0xE1:m 	-U hfuse:w:0x99:m 	-U lock:w:0xFF:m
 SRC = ./src
 BIN = ./bin
@@ -27,7 +27,7 @@ OBJECTS    = $(BIN)/main.o
 # Tune the lines below only if you know what you are doing:
 # Optimized for speed, not for size
 AVRDUDE = avrdude $(PROGRAMMER) -p $(DEVICE)
-COMPILE = avr-gcc -Wall -Os -DF_CPU=$(CLOCK) -mmcu=$(DEVICE)
+COMPILE = avr-gcc -Wall -Os -std=c99 -DF_CPU=$(CLOCK) -mmcu=$(DEVICE)
 
 # symbolic targets:
 all:	$(OUTHEX)
