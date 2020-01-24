@@ -11,7 +11,7 @@ ax.set_ylabel( "Voltage (Volts)" )
 ax.xaxis.set_ticks( np.arange(0, 50, 1.0 ))
 ax.grid()
 buttonAxis = plt.axes([0.9,0.0,0.1,0.075])
-bcut = Button( buttonAxis, 'YES', color='red', hovercolor='green')
+bcut = Button( buttonAxis, 'Sample', color='red', hovercolor='green')
 
 timerDurationSec = {
         '5':b'\x00',
@@ -52,12 +52,15 @@ def display_data( data ):
     channel2 = array[ :, 3]
     time[0] = 0
     timeAxis = np.cumsum(time)
-    p1 =ax.plot( timeAxis[600], channel1[:600] )
-    p2 =ax.plot( timeAxis[:600], channel2[:600] )
-    ax.xaxis.set_ticks( np.arange(0, len(plotData), 500.0 ))
+    print( str(len(timeAxis)) + ", " + str( max(timeAxis)))
+    p1 =ax.plot( timeAxis, channel1 )
+    p2 =ax.plot( timeAxis, channel2 )
+#    ax.xaxis.set_ticks( np.arange(0, len(plotData), 500.0 ))
     start, end = ax.get_xlim()
-    ax.axis([0,500,0,5] )
-    ax.xaxis.set_ticks(np.arange(0, 500, 50))
+    ax.axis([0,max(timeAxis),0,5] )
+    ax.xaxis.set_ticks(np.arange(0, max(timeAxis), 200))
+    ax.set_xlabel( "Time (200 div =625ms)" )
+    ax.set_ylabel( "Voltage (Volts)" )
     datacursor( p1 )
     datacursor( p2 )
     ax.grid()
@@ -66,7 +69,7 @@ def display_data( data ):
 
 def update_figure( val ):
     pos = spos.val
-    ax.axis([pos,pos+500,0,5] )
+    ax.axis([pos,pos+1000,0,5] )
 #    ax.xaxis.set_ticks( np.arange(0, len(plotData), 10.0 ))
     fig1.canvas.draw_idle()
 
@@ -80,6 +83,6 @@ def onClick( event ):
 
 bcut.on_clicked( onClick )
 sliderAxes = plt.axes([0.2, 0.01, 0.65, 0.03] )
-spos = Slider(sliderAxes, 'Pos', 0, 1600.0)
+spos = Slider(sliderAxes, 'Pos', 0, 3300.0)
 spos.on_changed( update_figure )
 plt.show()
