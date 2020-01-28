@@ -6,19 +6,22 @@ from mpldatacursor import datacursor
 from matplotlib.widgets import Slider
 fig1 = plt.figure()
 ax = fig1.add_subplot(111)
-ax.set_xlabel( "Time" )
-ax.set_ylabel( "Voltage (Volts)" )
+ax.set_xlabel( "Time",fontsize=18 )
+ax.set_ylabel( "Voltage (Volts)",fontsize=18 )
 ax.xaxis.set_ticks( np.arange(0, 50, 1.0 ))
 ax.grid()
+channel0_text = fig1.text(0.3, 0.9, 'Channel 0 peak-to-peak voltage: {} Volts'.format(100), style='italic', fontsize=14)
+channel1_text = fig1.text(0.7, 0.9, 'Channel 1 peak-to-peak voltage: {} Volts'.format(100), style='italic', fontsize=14)
 buttonAxis = plt.axes([0.9,0.0,0.1,0.075])
 bcut = Button( buttonAxis, 'Sample', color='red', hovercolor='green')
 
+ax.legend()
 timerDurationSec = {
         '5':b'\x00',
         '10':b'\x01',
         }
 
-ser = serial.Serial( port = 'COM10',
+ser = serial.Serial( port = 'COM11',
         baudrate = 9600,
         parity = serial.PARITY_NONE,
         bytesize = serial.EIGHTBITS,
@@ -36,12 +39,11 @@ def start_sample( ):
         check_bits2 = int.from_bytes( recieved[5:6], "little" )
         if check_bits1 & ( 1 << 0x7 ) and check_bits2 & ( 1 << 0x7 ):
             break
-        time1 = int.from_bytes( recieved[ :1 ], "little" );
-        time2 = int.from_bytes( recieved[ 3:4], "little" );
-        val1 = int.from_bytes( recieved[1:3], "little" ) * 5/1024;
-        val2 = int.from_bytes( recieved[4:], "little" ) * 5/1024;
+        time1 = int.from_bytes( recieved[ :1 ], "little" )
+        time2 = int.from_bytes( recieved[ 3:4], "little" )
+        val1 = int.from_bytes( recieved[1:3], "little" ) * 5/1024
+        val2 = int.from_bytes( recieved[4:], "little" ) * 5/1024
         plotData.append( [time1, val1, time2, val2])
-        print( [time1, val1, time2, val2])
     return
 
 
@@ -57,19 +59,23 @@ def display_data( data ):
     p2 =ax.plot( timeAxis, channel2 )
 #    ax.xaxis.set_ticks( np.arange(0, len(plotData), 500.0 ))
     start, end = ax.get_xlim()
-    ax.axis([0,max(timeAxis),0,5] )
+    ax.axis([0,max(timeAxis),0,5.5] )
     ax.xaxis.set_ticks(np.arange(0, max(timeAxis), 200))
-    ax.set_xlabel( "Time (200 div =625ms)" )
-    ax.set_ylabel( "Voltage (Volts)" )
+    ax.set_xlabel( "Time (200 div =625ms)", fontsize = 18 )
+    ax.set_ylabel( "Voltage (Volts)", fontsize=16 )
     datacursor( p1 )
     datacursor( p2 )
+    ch0pp = max( channel1 ) - min(channel1)
+    ch1pp = max( channel2 ) - min(channel2)
+    channel0_text.set_text('Channel 0 peak-to-peak voltage: {} Volts'.format(ch0pp) )
+    channel1_text.set_text('Channel 1 peak-to-peak voltage: {} Volts'.format(ch1pp) )
     ax.grid()
     plt.show()
 
 
 def update_figure( val ):
     pos = spos.val
-    ax.axis([pos,pos+1000,0,5] )
+    ax.axis([pos,pos+1000,0,5.5] )
 #    ax.xaxis.set_ticks( np.arange(0, len(plotData), 10.0 ))
     fig1.canvas.draw_idle()
 
@@ -77,7 +83,7 @@ def onClick( event ):
     plotData.clear()
     ax.clear()
     plt.show()
-    data = ser.write( timerDurationSec['10'] )
+    data = ser.write( timerDurationSec['5'] )
     start_sample()
     display_data( plotData )
 
