@@ -16,7 +16,8 @@ typedef uint16_t u16;
 typedef uint8_t u8;
 typedef uint32_t u32;
 
-static u8 data_to_send[4 * 25]; // Send data in bursts of 100 bytes
+#define MAX_DATA_SIZE ( 3*600 )
+static u8 data_to_send[MAX_DATA_SIZE]; // Send data in bursts of 100 bytes
 static u8 data_len = 100;
 #define BAUD_RATE 9600
 
@@ -31,7 +32,8 @@ static u8 data_len = 100;
 #define ADC_ENABLE_BIT ADEN
 enum ADC_Inputs {
   ADC_INPUT_0 = 0x0,
-  ADC_INPUT_1 = 0x1
+  ADC_INPUT_1 = 0x1,
+  ADC_INPUT_7 = 0x7,
 };
 
 enum ADC_Refs {
@@ -88,8 +90,8 @@ static u8 Timer_Duration[] = {
 
 void USART_init( u16 baud ){
  // Set the baud rate
-  //UBRRH = ( u8 )( baud >> 8 );
-  //UBRRL = baud & 0xff;
+  //UBRRH = 0x01;
+  //UBRRL = 0x04;
   setBaud( 9600, 1.0e6 );
   // Enable reciever and transmitter
   UCSRB = ( 1 << RXEN ) | ( 1 << TXEN );
@@ -129,8 +131,8 @@ u8 USART_Receive( void ){
 
 void ADC_init( u8 prescaler ){
   // Enable the ADC
-  ADCSRA |= ( 1 << ADC_ENABLE_BIT ) | ( prescaler & 0x7 );
-  ADMUX = ( ADC_AVCC << REFS0 );
+  ADCSRA |= ( ( 1 << ADEN ) | ( prescaler & 0x7 ) );
+  ADMUX |= ( (1<<ADLAR) | ( ADC_AVCC << REFS0 ) );
 
 }
 
@@ -201,52 +203,53 @@ static inline void Timer2_Reset( void ){
 
 int main(void){
   //cli();
+#if 1
   DDRD |= (1<<PD7)|(1<<PD6)|(1<<PD5)|(1<<PD4) ;
   USART_init( 6 );  
-  ADC_init( ADC_PS_4 ); 
+  ADC_init( ADC_PS_8 ); 
   Global_State = STATE_INACTIVE;
   // Wait for the host to send something first
   u8 user_input, time;
+  u8 *start = data_to_send;
+  u8 *end = data_to_send + MAX_DATA_SIZE;
   sei();
   for ( ; ; ){
     switch ( Global_State ) {
       case STATE_ADC_CONVERSION:
-//        PORTD ^= ( 1 << PD4 );
-        ADMUX |= ( ADC_INPUT_0  );
-        SET_BIT( ADCSRA, ADSC );
-        time = TCNT2;
-        while ( !ADC_CONVERSION_COMPLETE );
-        data_to_send[0] = time;
-        data_to_send[1] = ADCL;
-        data_to_send[2] = ADCH  & 0x3;
-        ADMUX &= ~(ADC_INPUT_0 );
-
-        ADMUX |= ( ADC_INPUT_1  );
-        SET_BIT( ADCSRA, ADSC );
-        time = TCNT2;
-        TCNT2 ^= TCNT2;
-        while ( !ADC_CONVERSION_COMPLETE );
-        data_to_send[3] = time;
-        data_to_send[4] = ADCL;
-        data_to_send[5] = ADCH  & 0x3;
-
-        USART_Transmit_Buffer( data_to_send, 6 );
-        ADMUX &= ~( ADC_INPUT_1 );
+        while( start < end ){ 
+          time = TCNT2;
+          TCNT2 = 0;
+          ADMUX |= ( ADC_INPUT_0  );
+          SET_BIT( ADCSRA, ADSC );
+          *start = time; start++;
+          while ( !ADC_CONVERSION_COMPLETE );
+          *start = ADCH; start++;
+          ADMUX &= ~(ADC_INPUT_0 ); 
+          ADMUX |= ( ADC_INPUT_7  );
+          SET_BIT( ADCSRA, ADSC );
+          while ( !ADC_CONVERSION_COMPLETE );
+          *start = ADCH; start++;
+          ADMUX &= ~( ADC_INPUT_7 );
+         }
+        PORTD |= (1<<PD6);
+        Global_State = STATE_INACTIVE;
+        End_Of_Conversion = true;
         break;
       case STATE_INACTIVE:
         if ( End_Of_Conversion ){
-          for ( int i = 0; i < 6 ; i++ ){
-            USART_Transmit( 1 << 0x7 );
+          for ( u8 *s = data_to_send; s < end; s++ ){ 
+            USART_Transmit( *s );
           }
+          End_Of_Conversion = false;
+          start = data_to_send;
         }
-
         cli();
         SET_BIT( PORTD, PD6 ); 
         RESET_BIT( PORTD, PD4 );
         user_input = USART_Receive();
         sei();
 
-        TCCR2 =  TIMER2_PS_8 & 0x7;
+        TCCR2 =  TIMER2_PS_128 & 0x7;
         if ( user_input == 0x0 ) {
           Timer1_Init( TIMER_PS_256,
               Timer_Duration[0],
@@ -256,7 +259,6 @@ int main(void){
               Timer_Duration[2],
               Timer_Duration[3] );
         }
-
         Global_State = STATE_ADC_CONVERSION;
         RESET_BIT( PORTD, PD6 );
         Timer1_Reset();
@@ -266,5 +268,10 @@ int main(void){
         break;
     }
   }
+#else 
+ while ( 1 ){
+
+ }
+ #endif
   return 0;
 }

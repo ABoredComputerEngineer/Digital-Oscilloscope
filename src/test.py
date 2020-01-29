@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
 from mpldatacursor import datacursor
 from matplotlib.widgets import Slider
+from scipy import interpolate
 fig1 = plt.figure()
 ax = fig1.add_subplot(111)
 ax.set_xlabel( "Time",fontsize=18 )
@@ -21,37 +22,34 @@ timerDurationSec = {
         '10':b'\x01',
         }
 
-ser = serial.Serial( port = 'COM11',
+ser = serial.Serial( port = 'COM10',
         baudrate = 9600,
         parity = serial.PARITY_NONE,
         bytesize = serial.EIGHTBITS,
         stopbits = serial.STOPBITS_ONE,
-        timeout = 1 )
+        timeout = 2 )
 if ser is None:
     print( "Unable to open Serial Port at COM6" )
 
 plotData = [[0,0,0,0]] 
 # TODO: Needs more optimization
 def start_sample( ):
-    while 1:
-        recieved = ser.read( 6 )
-        check_bits1 = int.from_bytes( recieved[2:3], "little" )
-        check_bits2 = int.from_bytes( recieved[5:6], "little" )
-        if check_bits1 & ( 1 << 0x7 ) and check_bits2 & ( 1 << 0x7 ):
-            break
-        time1 = int.from_bytes( recieved[ :1 ], "little" )
-        time2 = int.from_bytes( recieved[ 3:4], "little" )
-        val1 = int.from_bytes( recieved[1:3], "little" ) * 5/1024
-        val2 = int.from_bytes( recieved[4:], "little" ) * 5/1024
-        plotData.append( [time1, val1, time2, val2])
+    for i in range( 0, 600 ):
+        recv = ser.read( 3 )
+        #print( recv )
+        y1 = int.from_bytes( recv[:1], "little" )
+        y2 = int.from_bytes( recv[1:2], "little" )
+        y3 = int.from_bytes( recv[2:], "little" )
+        print( str(y1) + ","+str(y2)+","+str(y3))
+        plotData.append( [y1,y2,y3] )
     return
 
 
 def display_data( data ):
-    array = np.array( plotData )
+    array = np.array( data )
     time = array[ :, 0]
-    channel1 = array[ :, 1]
-    channel2 = array[ :, 3]
+    channel2 = array[ :, 2] * 5/255
+    channel1 = ( ( array[ :, 1] * 5/255 )-1.2)
     time[0] = 0
     timeAxis = np.cumsum(time)
     print( str(len(timeAxis)) + ", " + str( max(timeAxis)))
