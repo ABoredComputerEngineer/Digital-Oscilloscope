@@ -14,9 +14,18 @@ ax.grid()
 channel0_text = fig1.text(0.3, 0.9, 'Channel 0 peak-to-peak voltage: {} Volts'.format(100), style='italic', fontsize=14)
 channel1_text = fig1.text(0.7, 0.9, 'Channel 1 peak-to-peak voltage: {} Volts'.format(100), style='italic', fontsize=14)
 buttonAxis = plt.axes([0.9,0.0,0.1,0.075])
+itBaxis= plt.axes( [0.9, 0.6, 0.1, 0.075])
+incTimeAxisButton = Button( itBaxis, 'Increase', color='red', hovercolor='green')
+
+dtBaxis= plt.axes( [0.9, 0.4, 0.1, 0.075])
+decTimeAxisButton = Button( dtBaxis, 'Decrease', color='red', hovercolor='green')
 bcut = Button( buttonAxis, 'Sample', color='red', hovercolor='green')
 
+timeScaleLength = 100 # in milli seconds
+timeScaleStep = 10 # in milli seconds
+timerPreScaler = 1
 ax.legend()
+
 timerDurationSec = {
         '5':b'\x00',
         '10':b'\x01',
@@ -32,8 +41,15 @@ if ser is None:
     print( "Unable to open Serial Port at COM6" )
 
 plotData = [[0,0,0,0]] 
+channel1 = []
+channel2 = []
+timeAxis = []
 # TODO: Needs more optimization
 def start_sample( ):
+    global plotData 
+    global channel1 
+    global channel2 
+    global timeAxis 
     for i in range( 0, 600 ):
         recv = ser.read( 3 )
         #print( recv )
@@ -42,24 +58,23 @@ def start_sample( ):
         y3 = int.from_bytes( recv[2:], "little" )
         print( str(y1) + ","+str(y2)+","+str(y3))
         plotData.append( [y1,y2,y3] )
+    array = np.array( plotData )
+    time = array[ :, 0]
+    channel2 = array[ :, 2] * 5/255
+    channel1 = ( ( array[ :, 1] * 5/255 )-1.2)
+    timeAxis = np.cumsum(time) / ( 1000 * timerPreScaler ) # in milli seconds
     return
 
 
 def display_data( data ):
-    array = np.array( data )
-    time = array[ :, 0]
-    channel2 = array[ :, 2] * 5/255
-    channel1 = ( ( array[ :, 1] * 5/255 )-1.2)
-    time[0] = 0
-    timeAxis = np.cumsum(time)
+    global timeAxis
     print( str(len(timeAxis)) + ", " + str( max(timeAxis)))
     p1 =ax.plot( timeAxis, channel1 )
     p2 =ax.plot( timeAxis, channel2 )
-#    ax.xaxis.set_ticks( np.arange(0, len(plotData), 500.0 ))
     start, end = ax.get_xlim()
     ax.axis([0,max(timeAxis),0,5.5] )
-    ax.xaxis.set_ticks(np.arange(0, max(timeAxis), 200))
-    ax.set_xlabel( "Time (200 div =625ms)", fontsize = 18 )
+    ax.xaxis.set_ticks(np.arange(0, max(timeAxis), max(timeAxis) / 10 ))
+    ax.set_xlabel( "Time (micro seconds)", fontsize = 18 )
     ax.set_ylabel( "Voltage (Volts)", fontsize=16 )
     datacursor( p1 )
     datacursor( p2 )
@@ -73,9 +88,31 @@ def display_data( data ):
 
 def update_figure( val ):
     pos = spos.val
-    ax.axis([pos,pos+1000,0,5.5] )
+    ax.axis([pos,pos+timeScaleLength,0,5.5] )
+    ax.xaxis.set_ticks(np.arange(pos, pos + timeScaleLength, timeScaleLength/10))
 #    ax.xaxis.set_ticks( np.arange(0, len(plotData), 10.0 ))
     fig1.canvas.draw_idle()
+
+
+def onTimeIncrease( event ):
+    global timeScaleLength
+    pos = spos.val
+    if ( timeScaleLength - timeScaleStep > 0 ):
+        timeScaleLength = timeScaleLength - timeScaleStep 
+    ax.axis( [pos,pos+timeScaleLength, 0, 5.5 ]) 
+    ax.xaxis.set_ticks(np.arange(pos, pos + timeScaleLength, timeScaleLength/10))
+    fig1.canvas.draw_idle()
+    return
+
+def onTimeDecrease( event ):
+    global timeScaleLength
+    pos = spos.val
+    if ( timeScaleLength + timeScaleStep < 1000 ):
+        timeScaleLength = timeScaleLength +timeScaleStep 
+    ax.axis( [pos,pos+timeScaleLength, 0, 5.5 ]) 
+    ax.xaxis.set_ticks(np.arange(pos, pos + timeScaleLength, timeScaleLength/10))
+    fig1.canvas.draw_idle()
+    return
 
 def onClick( event ):
     plotData.clear()
@@ -86,6 +123,8 @@ def onClick( event ):
     display_data( plotData )
 
 bcut.on_clicked( onClick )
+incTimeAxisButton.on_clicked( onTimeIncrease )
+decTimeAxisButton.on_clicked( onTimeDecrease )
 sliderAxes = plt.axes([0.2, 0.01, 0.65, 0.03] )
 spos = Slider(sliderAxes, 'Pos', 0, 3300.0)
 spos.on_changed( update_figure )

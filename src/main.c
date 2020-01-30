@@ -249,7 +249,7 @@ int main(void){
         user_input = USART_Receive();
         sei();
 
-        TCCR2 =  TIMER2_PS_128 & 0x7;
+        TCCR2 =  TIMER2_PS_1 & 0x7;
         if ( user_input == 0x0 ) {
           Timer1_Init( TIMER_PS_256,
               Timer_Duration[0],
