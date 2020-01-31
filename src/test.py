@@ -36,7 +36,6 @@ sliderAxes = plt.axes([0.2, 0.01, 0.65, 0.03] )
 timeScaleLength = 100 # in milli seconds
 timeScaleStep = 10 # in milli seconds
 timerPreScaler = 128
-ax.legend()
 
 spos = Slider(sliderAxes, 'Pos', 0, 100.0)
 
@@ -131,13 +130,15 @@ def display_data( data ):
     global timeAxis
     global spos
     global sliderAxes
+    global timeScaleLength
     print( str(len(timeAxis)) + ", " + str( max(timeAxis)))
-    p1 =ax.plot( timeAxis, channel1 )
-    p2 =ax.plot( timeAxis, channel2 )
-    start, end = ax.get_xlim()
-    ax.axis([0,max(timeAxis),0,5.5] )
-    ax.xaxis.set_ticks(np.arange(0, max(timeAxis), max(timeAxis) / 10 ))
-    ax.set_xlabel( "Time (micro seconds)", fontsize = 18 )
+    p1 =ax.plot( timeAxis, channel1, label="channel1" )
+    p2 =ax.plot( timeAxis, channel2, label="channel2" )
+    #start, end = ax.get_xlim()
+    ax.axis([0,timeScaleLength,0,5.5] )
+    #ax.xaxis.set_ticks(np.arange(0, max(timeAxis), max(timeAxis) / 10 ))
+    ax.xaxis.set_ticks(np.arange(0, timeScaleLength, timeScaleLength / 10 ))
+    ax.set_xlabel( "Time (milli seconds)", fontsize = 18 )
     ax.set_ylabel( "Voltage (Volts)", fontsize=16 )
     datacursor( p1 )
     datacursor( p2 )
@@ -146,6 +147,7 @@ def display_data( data ):
     channel0_text.set_text('Channel 0 peak-to-peak voltage: {} Volts'.format(ch0pp) )
     channel1_text.set_text('Channel 1 peak-to-peak voltage: {} Volts'.format(ch1pp) )
     ax.grid()
+    ax.legend()
     spos = Slider(sliderAxes, 'Pos', 0, max(timeAxis) )
     spos.on_changed( update_figure )
     plt.show()
@@ -180,7 +182,7 @@ def onSample( event ):
     global program
     plotData.clear()
     ax.clear()
-    #sliderAxes.clear()
+    sliderAxes.clear()
     start_sample(program)
     display_data( plotData )
     return
@@ -189,11 +191,17 @@ def onRadioClick( label ):
     global program
     global ProgramSpeedDict
     global timerPreScaler
+    global timeScaleLength
+    global timeScaleStep
     program = ProgramSpeedDict[label]
     if ( program == ProgramState.slow ):
         timerPreScaler = 128
+        timeScaleLength = 100
+        timeScaleStep = 20
     elif ( program == ProgramState.fast ):
         timerPreScaler = 1
+        timeScaleLength = 7
+        timeScaleStep = 2 
     return
 
 sampleButton.on_clicked( onSample )
