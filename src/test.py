@@ -35,7 +35,7 @@ program = ProgramState.slow
 sliderAxes = plt.axes([0.2, 0.01, 0.65, 0.03] )
 timeScaleLength = 100 # in milli seconds
 timeScaleStep = 10 # in milli seconds
-timerPreScaler = 1
+timerPreScaler = 128
 ax.legend()
 
 spos = Slider(sliderAxes, 'Pos', 0, 100.0)
@@ -110,6 +110,7 @@ def start_sample( state ):
     global channel1 
     global channel2 
     global timeAxis 
+    global timerPreScaler
     if ( state == ProgramState.fast ): 
         read_data_fast()
     elif ( state == ProgramState.slow ):
@@ -121,7 +122,8 @@ def start_sample( state ):
     time = array[ :, 0]
     channel2 = array[ :, 2] 
     channel1 = array[ :, 1]
-    timeAxis = np.cumsum(time) / ( 1000 * timerPreScaler ) # in milli seconds
+    timeAxis = ( np.cumsum(time) * timerPreScaler ) / ( 1000 ) # in milli seconds
+    print( "timer prescaler = " + str( timerPreScaler))
     return
 
 
@@ -186,7 +188,12 @@ def onSample( event ):
 def onRadioClick( label ):
     global program
     global ProgramSpeedDict
+    global timerPreScaler
     program = ProgramSpeedDict[label]
+    if ( program == ProgramState.slow ):
+        timerPreScaler = 128
+    elif ( program == ProgramState.fast ):
+        timerPreScaler = 1
     return
 
 sampleButton.on_clicked( onSample )
