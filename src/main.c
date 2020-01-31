@@ -16,6 +16,8 @@ typedef uint16_t u16;
 typedef uint8_t u8;
 typedef uint32_t u32;
 
+#define TRUE 1
+#define FALSE 0
 #define MAX_DATA_SIZE ( 3*600 )
 static u8 data_to_send[MAX_DATA_SIZE]; 
 #define BAUD_RATE 9600
@@ -80,7 +82,7 @@ typedef enum Program_State{
 } Program_State;
 
 volatile Program_State Global_State;
-volatile u8 End_Of_Conversion;
+volatile u8 End_Of_Conversion = FALSE;
 
 static u8 Timer_Duration[] = {
   0x4c, 0x4a, // 5sec with 1MHz, PS =256 
@@ -187,7 +189,7 @@ void Timer2_Init( u8 ps ){
 ISR(TIMER1_COMPA_vect){
   PORTD |= (1<<PD6);
   Global_State = STATE_INACTIVE;
-  End_Of_Conversion = true;
+  End_Of_Conversion = TRUE;
 }
 
 
@@ -200,6 +202,72 @@ static inline void Timer2_Reset( void ){
   SFIOR &= ~(1<<PSR2);
 }
 
+void ADC_Convert_Fast( void ){
+  RESET_BIT( PORTD, PD6 );
+  ADC_Init(ADC_PS_4);
+  u8 time;
+  u8 *start = data_to_send;
+  u8 *end = data_to_send + MAX_DATA_SIZE;
+  Timer1_Reset();
+  Timer2_Reset();
+  while( start < end ){ 
+    time = TCNT2;
+    TCNT2 = 0;
+    ADMUX |= ( ADC_INPUT_0  );
+    SET_BIT( ADCSRA, ADSC );
+    *start = time; start++;
+    while ( !ADC_CONVERSION_COMPLETE );
+    *start = ADCH; start++;
+    ADMUX &= ~(ADC_INPUT_0 ); 
+    ADMUX |= ( ADC_INPUT_7  );
+    SET_BIT( ADCSRA, ADSC );
+    while ( !ADC_CONVERSION_COMPLETE );
+    *start = ADCH; start++;
+    ADMUX &= ~( ADC_INPUT_7 );
+   }
+  PORTD |= (1<<PD6);
+  Global_State = STATE_INACTIVE;
+  for ( u8 *s = data_to_send; s < end; s++ ){ 
+    USART_Transmit( *s );
+  }
+}
+
+void ADC_Convert_Slow( void ){
+  u8 time;
+  RESET_BIT( PORTD, PD6 );
+  ADC_Init(ADC_PS_4);
+  Timer1_Reset();
+  Timer2_Reset();
+  End_Of_Conversion = FALSE;
+  while ( End_Of_Conversion == FALSE ){ 
+          ADMUX |= ( ADC_INPUT_0  );
+          SET_BIT( ADCSRA, ADSC );
+          time = TCNT2;
+          while ( !ADC_CONVERSION_COMPLETE );
+          data_to_send[0] = time;
+          data_to_send[1] = ADCL;
+          data_to_send[2] = ADCH  & 0x3;
+          ADMUX &= ~(ADC_INPUT_0 );
+
+          ADMUX |= ( ADC_INPUT_1  );
+          SET_BIT( ADCSRA, ADSC );
+          time = TCNT2;
+          TCNT2 ^= TCNT2;
+          while ( !ADC_CONVERSION_COMPLETE );
+          data_to_send[3] = time;
+          data_to_send[4] = ADCL;
+          data_to_send[5] = ADCH  & 0x3;
+
+          USART_Transmit_Buffer( data_to_send, 6 );
+          ADMUX &= ~( ADC_INPUT_1 );
+   }
+   cli();
+   for ( u8 i = 0; i < 6 ; i++ ){
+     USART_Transmit( 1 << 0x7 );
+   }
+   End_Of_Conversion = FALSE;
+}
+
 int main(void){
   cli();
 #if 1
@@ -207,98 +275,32 @@ int main(void){
   USART_init( 6 );  
   ADC_Init( ADC_PS_4 ); 
   Global_State = STATE_INACTIVE;
-  // Wait for the host to send something first
-  u8 user_input, time;
-  u8 *start = data_to_send;
-  u8 *end = data_to_send + MAX_DATA_SIZE;
   for ( ; ; ){
-    switch ( Global_State ) {
-      case STATE_ADC_CONVERSION_SLOW:
-        ADMUX |= ( ADC_INPUT_0  );
-        SET_BIT( ADCSRA, ADSC );
-        time = TCNT2;
-        while ( !ADC_CONVERSION_COMPLETE );
-        data_to_send[0] = time;
-        data_to_send[1] = ADCL;
-        data_to_send[2] = ADCH  & 0x3;
-        ADMUX &= ~(ADC_INPUT_0 );
-
-        ADMUX |= ( ADC_INPUT_1  );
-        SET_BIT( ADCSRA, ADSC );
-        time = TCNT2;
-        TCNT2 ^= TCNT2;
-        while ( !ADC_CONVERSION_COMPLETE );
-        data_to_send[3] = time;
-        data_to_send[4] = ADCL;
-        data_to_send[5] = ADCH  & 0x3;
-
-        USART_Transmit_Buffer( data_to_send, 6 );
-        ADMUX &= ~( ADC_INPUT_1 );
-        break;
-      case STATE_ADC_CONVERSION_FAST:
-        while( start < end ){ 
-          time = TCNT2;
-          TCNT2 = 0;
-          ADMUX |= ( ADC_INPUT_0  );
-          SET_BIT( ADCSRA, ADSC );
-          *start = time; start++;
-          while ( !ADC_CONVERSION_COMPLETE );
-          *start = ADCH; start++;
-          ADMUX &= ~(ADC_INPUT_0 ); 
-          ADMUX |= ( ADC_INPUT_7  );
-          SET_BIT( ADCSRA, ADSC );
-          while ( !ADC_CONVERSION_COMPLETE );
-          *start = ADCH; start++;
-          ADMUX &= ~( ADC_INPUT_7 );
-         }
-        PORTD |= (1<<PD6);
-        Global_State = STATE_INACTIVE;
-        for ( u8 *s = data_to_send; s < end; s++ ){ 
-          USART_Transmit( *s );
-        }
-        start = data_to_send;
-        End_Of_Conversion = false;
-        break;
-      case STATE_INACTIVE:
-        if ( End_Of_Conversion ){
-          for ( int i = 0; i < 6 ; i++ ){
-            USART_Transmit( 1 << 0x7 );
-          }
-        }
-        cli();
-        ADC_Disable();
-        SET_BIT( PORTD, PD6 ); 
-        RESET_BIT( PORTD, PD4 );
-
-        user_input = USART_Receive();
-        if ( user_input ){
-          Global_State = STATE_ADC_CONVERSION_FAST;
-          TCCR2 =  TIMER2_PS_1 & 0x7;
+      ADC_Disable();
+      SET_BIT( PORTD, PD6 ); 
+      RESET_BIT( PORTD, PD4 );
+      u8 input1 = USART_Receive();
+      u8 input2 = USART_Receive();
+       if ( input1 ){
+        Global_State = STATE_ADC_CONVERSION_FAST;
+        TCCR2 =  TIMER2_PS_1 & 0x7;
+        ADC_Convert_Fast();
+      } else {
+        Global_State = STATE_ADC_CONVERSION_SLOW;
+        sei();
+        TCCR2 =  TIMER2_PS_128 & 0x7;
+        if ( input2 == 0x0 ) {
+          Timer1_Init( TIMER_PS_256,
+              Timer_Duration[0],
+              Timer_Duration[1] );
         } else {
-          Global_State = STATE_ADC_CONVERSION_SLOW;
-          sei();
-          TCCR2 =  TIMER2_PS_128 & 0x7;
-          user_input = USART_Receive();
-          if ( user_input == 0x0 ) {
-            Timer1_Init( TIMER_PS_256,
-                Timer_Duration[0],
-                Timer_Duration[1] );
-          } else {
-            Timer1_Init( TIMER_PS_256,
-                Timer_Duration[2],
-                Timer_Duration[3] );
-          }
+          Timer1_Init( TIMER_PS_256,
+              Timer_Duration[2],
+              Timer_Duration[3] );
         }
+        ADC_Convert_Slow();
+      }
 
-        RESET_BIT( PORTD, PD6 );
-        ADC_Init(ADC_PS_4);
-        Timer1_Reset();
-        Timer2_Reset();
-
-        break;
-      default:
-        break;
-    }
   }
 #else 
  while ( 1 ){

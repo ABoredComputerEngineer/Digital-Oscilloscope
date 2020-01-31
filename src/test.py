@@ -1,11 +1,12 @@
 import serial
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
 from mpldatacursor import datacursor
 from matplotlib.widgets import Slider
 from matplotlib.widgets import RadioButtons
-
+import time
 from scipy import interpolate
 from enum import Enum
 
@@ -52,7 +53,7 @@ ProgramSpeedDict = {
         'LF': ProgramState.slow,
         'HF': ProgramState.fast
         }
-ser = serial.Serial( port = 'COM8',
+ser = serial.Serial( port = 'COM10',
         baudrate = 9600,
         parity = serial.PARITY_NONE,
         bytesize = serial.EIGHTBITS,
@@ -75,7 +76,7 @@ def update_figure( val ):
 
 def read_data_fast():
     global plotData
-    ser.write( b'\x01' )
+    ser.write( b'\x01\x01' )
     for i in range( 0, 600 ):
         recv = ser.read( 3 )
         y1 = int.from_bytes( recv[:1], "little" )
@@ -87,18 +88,19 @@ def read_data_fast():
 
 def read_data_slow():
     global plotData
-    ser.write( b'\x00' )
-    ser.write( b'\x01' )
+    ser.write( b'\x00\x00' )
     while 1:
         recieved = ser.read( 6 )
         check_bits1 = int.from_bytes( recieved[2:3], "little" )
         check_bits2 = int.from_bytes( recieved[5:6], "little" )
         if check_bits1 & ( 1 << 0x7 ) and check_bits2 & ( 1 << 0x7 ):
+            print("Ending Recieve data")
+            ser.read( 6 )
             break
-        time1 = int.from_bytes( recieved[ :1 ], "little" );
-        time2 = int.from_bytes( recieved[ 3:4], "little" );
-        val1 = int.from_bytes( recieved[1:3], "little" ) * 5/1024;
-        val2 = int.from_bytes( recieved[4:], "little" ) * 5/1024;
+        time1 = int.from_bytes( recieved[ :1 ], "little" )
+        time2 = int.from_bytes( recieved[ 3:4], "little" )
+        val1 = int.from_bytes( recieved[1:3], "little" ) * 5/1024
+        val2 = int.from_bytes( recieved[4:], "little" ) * 5/1024
         plotData.append( [time1, val1, time2, val2])
         print( [time1, val1, time2, val2])
     return
@@ -108,13 +110,15 @@ def start_sample( state ):
     global channel1 
     global channel2 
     global timeAxis 
-    
     if ( state == ProgramState.fast ): 
         read_data_fast()
     elif ( state == ProgramState.slow ):
         read_data_slow()
-
+    else :
+        print("Unkown program state")
+        sys.exit()
     array = np.array( plotData )
+    print( array )
     time = array[ :, 0]
     channel2 = array[ :, 2] * 5/255
     channel1 = ( ( array[ :, 1] * 5/255 )-1.2)
@@ -141,7 +145,6 @@ def display_data( data ):
     channel0_text.set_text('Channel 0 peak-to-peak voltage: {} Volts'.format(ch0pp) )
     channel1_text.set_text('Channel 1 peak-to-peak voltage: {} Volts'.format(ch1pp) )
     ax.grid()
-    
     spos = Slider(sliderAxes, 'Pos', 0, max(timeAxis) )
     spos.on_changed( update_figure )
     plt.show()
@@ -176,8 +179,7 @@ def onSample( event ):
     global program
     plotData.clear()
     ax.clear()
-    sliderAxes.clear()
-    #plt.show()
+    #sliderAxes.clear()
     start_sample(program)
     display_data( plotData )
     return

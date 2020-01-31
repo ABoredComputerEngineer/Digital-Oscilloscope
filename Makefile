@@ -14,7 +14,7 @@
 
 DEVICE     = atmega32
 CLOCK      = 1000000
-PROGRAMMER = -c arduino -P COM7 -b 19200 
+PROGRAMMER = -c arduino -P COM9 -b 19200 
 FUSES      = -U lfuse:w:0xE1:m 	-U hfuse:w:0x99:m 	-U lock:w:0xFF:m
 SRC = ./src
 BIN = ./bin
