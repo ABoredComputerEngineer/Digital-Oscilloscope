@@ -80,8 +80,8 @@ def read_data_fast():
     for i in range( 0, 600 ):
         recv = ser.read( 3 )
         y1 = int.from_bytes( recv[:1], "little" )
-        y2 = int.from_bytes( recv[1:2], "little" )
-        y3 = int.from_bytes( recv[2:], "little" )
+        y2 = int.from_bytes( recv[1:2], "little" ) * 5/255
+        y3 = int.from_bytes( recv[2:], "little" ) * 5/255
         print( str(y1) + ","+str(y2)+","+str(y3))
         plotData.append( [y1,y2,y3] )
     return
@@ -95,14 +95,14 @@ def read_data_slow():
         check_bits2 = int.from_bytes( recieved[5:6], "little" )
         if check_bits1 & ( 1 << 0x7 ) and check_bits2 & ( 1 << 0x7 ):
             print("Ending Recieve data")
-            ser.read( 6 )
+          #  ser.read( 6 )
             break
         time1 = int.from_bytes( recieved[ :1 ], "little" )
         time2 = int.from_bytes( recieved[ 3:4], "little" )
         val1 = int.from_bytes( recieved[1:3], "little" ) * 5/1024
         val2 = int.from_bytes( recieved[4:], "little" ) * 5/1024
-        plotData.append( [time1, val1, time2, val2])
-        print( [time1, val1, time2, val2])
+        plotData.append( [time1, val1,val2])
+        print( [time1, val1,val2])
     return
 
 def start_sample( state ):
@@ -118,10 +118,9 @@ def start_sample( state ):
         print("Unkown program state")
         sys.exit()
     array = np.array( plotData )
-    print( array )
     time = array[ :, 0]
-    channel2 = array[ :, 2] * 5/255
-    channel1 = ( ( array[ :, 1] * 5/255 )-1.2)
+    channel2 = array[ :, 2] 
+    channel1 = array[ :, 1]
     timeAxis = np.cumsum(time) / ( 1000 * timerPreScaler ) # in milli seconds
     return
 

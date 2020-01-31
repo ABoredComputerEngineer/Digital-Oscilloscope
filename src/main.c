@@ -130,10 +130,10 @@ u8 USART_Receive( void ){
   return UDR; 
 }
 
-void ADC_Init( u8 prescaler ){
+void ADC_Init( u8 prescaler, u8 left_adjust ){
   // Enable the ADC
   ADCSRA |= ( ( 1 << ADEN ) | ( prescaler & 0x7 ) );
-  ADMUX |= ( (1<<ADLAR) | ( ADC_AVCC << REFS0 ) );
+  ADMUX |= ( (left_adjust<<ADLAR) | ( ADC_AVCC << REFS0 ) );
 
 }
 
@@ -204,7 +204,7 @@ static inline void Timer2_Reset( void ){
 
 void ADC_Convert_Fast( void ){
   RESET_BIT( PORTD, PD6 );
-  ADC_Init(ADC_PS_4);
+  ADC_Init(ADC_PS_4,1);
   u8 time;
   u8 *start = data_to_send;
   u8 *end = data_to_send + MAX_DATA_SIZE;
@@ -235,7 +235,8 @@ void ADC_Convert_Fast( void ){
 void ADC_Convert_Slow( void ){
   u8 time;
   RESET_BIT( PORTD, PD6 );
-  ADC_Init(ADC_PS_4);
+  ADC_Init(ADC_PS_4, 0);
+  RESET_BIT(ADMUX,ADLAR);
   Timer1_Reset();
   Timer2_Reset();
   End_Of_Conversion = FALSE;
@@ -243,23 +244,22 @@ void ADC_Convert_Slow( void ){
           ADMUX |= ( ADC_INPUT_0  );
           SET_BIT( ADCSRA, ADSC );
           time = TCNT2;
+          TCNT2 = 0;
           while ( !ADC_CONVERSION_COMPLETE );
           data_to_send[0] = time;
           data_to_send[1] = ADCL;
           data_to_send[2] = ADCH  & 0x3;
           ADMUX &= ~(ADC_INPUT_0 );
 
-          ADMUX |= ( ADC_INPUT_1  );
+          ADMUX |= ( ADC_INPUT_7  );
           SET_BIT( ADCSRA, ADSC );
-          time = TCNT2;
-          TCNT2 ^= TCNT2;
           while ( !ADC_CONVERSION_COMPLETE );
           data_to_send[3] = time;
           data_to_send[4] = ADCL;
           data_to_send[5] = ADCH  & 0x3;
 
           USART_Transmit_Buffer( data_to_send, 6 );
-          ADMUX &= ~( ADC_INPUT_1 );
+          ADMUX &= ~( ADC_INPUT_7 );
    }
    cli();
    for ( u8 i = 0; i < 6 ; i++ ){
@@ -273,7 +273,7 @@ int main(void){
 #if 1
   DDRD |= (1<<PD7)|(1<<PD6)|(1<<PD5)|(1<<PD4) ;
   USART_init( 6 );  
-  ADC_Init( ADC_PS_4 ); 
+//  ADC_Init( ADC_PS_4 ); 
   Global_State = STATE_INACTIVE;
   for ( ; ; ){
       ADC_Disable();
